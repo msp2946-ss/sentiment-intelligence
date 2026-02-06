@@ -2,9 +2,14 @@ import joblib
 import os
 import re
 import string
+import sys
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 import numpy as np
+
+# Ensure we can import train_model
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from .train import train_model
 
 # Load artifacts
 MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../model_artifacts/sentiment_model.pkl')
@@ -21,7 +26,15 @@ def load_resources():
     if os.path.exists(MODEL_PATH):
         model = joblib.load(MODEL_PATH)
     else:
-        raise FileNotFoundError(f"Model not found at {MODEL_PATH}")
+        print(f"Model not found at {MODEL_PATH}. Training new model...")
+        try:
+            train_model()
+            if os.path.exists(MODEL_PATH):
+                model = joblib.load(MODEL_PATH)
+            else:
+                raise FileNotFoundError(f"Failed to create model at {MODEL_PATH}")
+        except Exception as e:
+            raise RuntimeError(f"Error training model: {e}")
     
     from nltk.corpus import stopwords
     stop_words = set(stopwords.words('english'))
