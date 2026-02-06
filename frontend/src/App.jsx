@@ -14,10 +14,7 @@ function App() {
       <nav className="fixed top-0 left-0 h-full w-64 bg-white/60 backdrop-blur-xl border-r border-white/40 shadow-sm flex flex-col hidden md:flex transition-all duration-300">
         <div className="p-8">
           <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-1">
-            <span className="text-blue-600">Anti</span>
-            <span className="text-red-500">grav</span>
-            <span className="text-yellow-500">ity</span>
-            <span className="text-green-600">.AI</span>
+            
           </h1>
         </div>
         <div className="flex-1 px-4 space-y-2">

@@ -14,7 +14,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.metrics import classification_report, accuracy_score
 
 # Ensure data directories exist
-os.makedirs('backend/app/model_artifacts', exist_ok=True)
+# Ensure data directories exist
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ARTIFACTS_DIR = os.path.join(BASE_DIR, 'model_artifacts')
+os.makedirs(ARTIFACTS_DIR, exist_ok=True)
 
 # Download necessary NLTK data
 print("Downloading NLTK data...")
@@ -75,7 +78,8 @@ def train_model():
     print(classification_report(y_test, y_pred))
     
     # Save model
-    model_path = 'backend/app/model_artifacts/sentiment_model.pkl'
+    # Save model
+    model_path = os.path.join(ARTIFACTS_DIR, 'sentiment_model.pkl')
     joblib.dump(pipeline, model_path)
     print(f"Model saved to {model_path}")
 

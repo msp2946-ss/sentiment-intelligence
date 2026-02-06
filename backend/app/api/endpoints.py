@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from backend.app.api.models import SentimentRequest, SentimentResponse, BulkSentimentRequest, BulkSentimentResponse
-from backend.app.model.predict import predict_sentiment
+from .models import SentimentRequest, SentimentResponse, BulkSentimentRequest, BulkSentimentResponse
+from ..model.predict import predict_sentiment
 import pandas as pd
 import io
 

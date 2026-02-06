@@ -15,7 +15,8 @@ const SentimentInput = ({ onResult }) => {
         setLoading(true);
         setError(null);
         try {
-            const response = await axios.post('http://127.0.0.1:8000/api/predict', { text });
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+            const response = await axios.post(`${apiUrl}/api/predict`, { text });
             onResult(response.data);
         } catch (err) {
             console.error(err);

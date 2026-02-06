@@ -1,8 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from backend.app.model.predict import load_resources
+from .model.predict import load_resources
+
 import nltk
+import sys
+import os
+
+# Ensure the backend directory is in the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,7 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from backend.app.api.endpoints import router
+from .api.endpoints import router
 app.include_router(router, prefix="/api")
 
 @app.get("/")

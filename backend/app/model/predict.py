@@ -7,7 +7,7 @@ from nltk.stem import WordNetLemmatizer
 import numpy as np
 
 # Load artifacts
-MODEL_PATH = 'backend/app/model_artifacts/sentiment_model.pkl'
+MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../model_artifacts/sentiment_model.pkl')
 model = None
 
 # We need to replicate preprocess logic or import it. 
