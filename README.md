@@ -6,7 +6,7 @@
 ## 1. Executive Summary
 This project is a high-performance, real-time Sentiment Intelligence Platform designed to analyze textual feedback and determine emotional tone (Positive, Negative, Neutral) with confidence scores. It leverages Machine Learning (LinearSVC) and Natural Language Processing (NLP) techniques, wrapped in a modern, production-ready web application.
 
-The system is built with a **FastAPI** backend for high-concurrency inference and a **React (Vite)** frontend featuring a futuristic "Antigravity" glassmorphism UI.
+The system is built with a **FastAPI** backend for high-concurrency inference and a **React (Vite)** frontend featuring a futuristic "Modern" glassmorphism UI.
 
 ---
 
@@ -111,5 +111,6 @@ npm run dev
 *   **User Authentication**: Multi-user support with private dashboards.
 
 ---
-*@ shreyansh pratap mishra *
-* All rights reserved. *
+**@shreyansh pratap mishra**  
+
+**All rights reserved.**
