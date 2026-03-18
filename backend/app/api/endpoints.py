@@ -113,8 +113,9 @@ def support_contact(
     _rate_limit: None = Depends(support_rate_limit),
     user: Dict[str, Any] = Depends(get_current_user),
 ):
-    smtp_user = os.getenv("GMAIL_SMTP_USER")
-    smtp_password = os.getenv("GMAIL_SMTP_APP_PASSWORD")
+    smtp_user = (os.getenv("GMAIL_SMTP_USER") or "").strip()
+    # Gmail app passwords are often displayed with spaces every 4 chars.
+    smtp_password = (os.getenv("GMAIL_SMTP_APP_PASSWORD") or "").replace(" ", "").strip()
     to_email = os.getenv("SUPPORT_TO_EMAIL", "shreyanshji2946@gmail.com")
     subject_prefix = os.getenv("SUPPORT_SUBJECT_PREFIX", "SentiAI Support")
 
