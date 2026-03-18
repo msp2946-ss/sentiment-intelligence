@@ -1,23 +1,20 @@
 import requests
-import time
 
-print("Waiting for API to start...")
-time.sleep(3)
+BASE_URL = "http://127.0.0.1:8000"
 
-try:
-    # Test Root
-    r = requests.get("http://127.0.0.1:8000/")
-    print(f"Root: {r.status_code} - {r.json()}")
 
-    # Test Prediction
-    payload = {"text": "This movie was absolutely fantastic! I loved every moment."}
-    r = requests.post("http://127.0.0.1:8000/api/predict", json=payload)
-    print(f"Prediction (Positive): {r.status_code} - {r.json()}")
+def test_prediction(text: str) -> None:
+    response = requests.post(f"{BASE_URL}/api/predict", json={"text": text}, timeout=30)
+    response.raise_for_status()
+    data = response.json()
+    print(text)
+    print(data)
+    print("-" * 80)
 
-    payload = {"text": "Terrible acting and boring plot. Waste of time."}
-    r = requests.post("http://127.0.0.1:8000/api/predict", json=payload)
-    print(f"Prediction (Negative): {r.status_code} - {r.json()}")
 
-    print("Verification Passed!")
-except Exception as e:
-    print(f"Verification Failed: {e}")
+if __name__ == "__main__":
+    print(requests.get(f"{BASE_URL}/api/health", timeout=30).json())
+
+    test_prediction("This app is fantastic and very useful")
+    test_prediction("This is the worst thing I have ever used")
+    test_prediction("The package arrived yesterday and includes all items")

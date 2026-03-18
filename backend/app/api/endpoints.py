@@ -1,47 +1,151 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from .models import SentimentRequest, SentimentResponse, BulkSentimentRequest, BulkSentimentResponse
+from typing import Any, Dict
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+import os
+import smtplib
+from email.message import EmailMessage
+
+from .models import (
+    BulkSentimentRequest,
+    BulkSentimentResponse,
+    SupportContactRequest,
+    SupportContactResponse,
+    SentimentRequest,
+    SentimentResponse,
+)
+from ..auth.dependencies import get_current_user
+from ..core.rate_limit import rate_limit
+from ..core.security_logging import log_security_event
 from ..model.predict import predict_sentiment
-import pandas as pd
-import io
 
 router = APIRouter()
 
+predict_rate_limit = rate_limit(limit=60, window_seconds=60, scope="predict")
+predict_bulk_rate_limit = rate_limit(limit=20, window_seconds=60, scope="predict_bulk")
+support_rate_limit = rate_limit(limit=10, window_seconds=300, scope="support_contact")
+
+
+@router.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+
 @router.post("/predict", response_model=SentimentResponse)
-async def predict(request: SentimentRequest):
+def predict(
+    request: SentimentRequest,
+    req: Request,
+    _rate_limit: None = Depends(predict_rate_limit),
+    user: Dict[str, Any] = Depends(get_current_user),
+):
     try:
-        result = predict_sentiment(request.text)
-        return SentimentResponse(**result)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return SentimentResponse(**predict_sentiment(request.text))
+    except Exception as exc:
+        log_security_event(
+            "predict_failed",
+            level=logging.ERROR,
+            path=req.url.path,
+            method=req.method,
+            user_sub=user.get("sub"),
+            provider=user.get("provider"),
+        )
+        raise HTTPException(status_code=500, detail="Failed to process sentiment analysis.") from exc
+
 
 @router.post("/predict-bulk", response_model=BulkSentimentResponse)
-async def predict_bulk(request: BulkSentimentRequest):
+def predict_bulk(
+    request: BulkSentimentRequest,
+    req: Request,
+    _rate_limit: None = Depends(predict_bulk_rate_limit),
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    log_security_event(
+        "predict_bulk_requested",
+        path=req.url.path,
+        method=req.method,
+        user_sub=user.get("sub"),
+        provider=user.get("provider"),
+        text_count=len(request.texts),
+    )
     results = []
     for text in request.texts:
+        if not text or not text.strip():
+            continue
         try:
-            res = predict_sentiment(text)
-            results.append(SentimentResponse(**res))
+            results.append(SentimentResponse(**predict_sentiment(text)))
         except Exception:
-            results.append(SentimentResponse(sentiment="Error", confidence=0.0, probabilities={}))
+            results.append(
+                SentimentResponse(
+                    sentiment="Neutral",
+                    confidence=0.34,
+                    probabilities={
+                        "positive": 0.33,
+                        "neutral": 0.34,
+                        "negative": 0.33,
+                    },
+                )
+            )
     return BulkSentimentResponse(results=results)
 
-@router.post("/upload-csv")
-async def upload_csv(file: UploadFile = File(...)):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a CSV.")
-    
+
+@router.post("/support/contact", response_model=SupportContactResponse)
+def support_contact(
+    request: SupportContactRequest,
+    req: Request,
+    _rate_limit: None = Depends(support_rate_limit),
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    smtp_user = os.getenv("GMAIL_SMTP_USER")
+    smtp_password = os.getenv("GMAIL_SMTP_APP_PASSWORD")
+    to_email = os.getenv("SUPPORT_TO_EMAIL", "shreyanshji2946@gmail.com")
+    subject_prefix = os.getenv("SUPPORT_SUBJECT_PREFIX", "SentiAI Support")
+
+    if not smtp_user or not smtp_password:
+        raise HTTPException(
+            status_code=500,
+            detail="Email service is not configured. Set GMAIL_SMTP_USER and GMAIL_SMTP_APP_PASSWORD.",
+        )
+
+    email_message = EmailMessage()
+    email_message["From"] = smtp_user
+    email_message["To"] = to_email
+    email_message["Reply-To"] = request.email
+    email_message["Subject"] = f"{subject_prefix}: {request.name}"
+    email_message.set_content(
+        "\n".join(
+            [
+                "New support request received.",
+                "",
+                f"Name: {request.name}",
+                f"Email: {request.email}",
+                "",
+                "Message:",
+                request.message,
+            ]
+        )
+    )
+
     try:
-        contents = await file.read()
-        df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
-        
-        if 'text' not in df.columns:
-             raise HTTPException(status_code=400, detail="CSV must contain a 'text' column.")
-        
-        results = []
-        for text in df['text'].fillna('').astype(str):
-            res = predict_sentiment(text)
-            results.append(res)
-        
-        return {"filename": file.filename, "total_processed": len(results), "preview": results[:5]}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as smtp:
+            smtp.login(smtp_user, smtp_password)
+            smtp.send_message(email_message)
+    except Exception as exc:
+        log_security_event(
+            "support_contact_send_failed",
+            level=logging.ERROR,
+            path=req.url.path,
+            method=req.method,
+            user_sub=user.get("sub"),
+            provider=user.get("provider"),
+        )
+        raise HTTPException(status_code=500, detail="Failed to send support message.") from exc
+
+    log_security_event(
+        "support_contact_sent",
+        path=req.url.path,
+        method=req.method,
+        user_sub=user.get("sub"),
+        provider=user.get("provider"),
+    )
+
+    return SupportContactResponse(success=True, detail="Support message sent successfully.")

@@ -1,78 +1,73 @@
-import joblib
 import os
-import re
-import string
-import sys
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
+from typing import Any
+
+import joblib
 import numpy as np
 
-# Ensure we can import train_model
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from .train import train_model
+from .train import MODEL_PATH, preprocess_text, train_model
 
-# Load artifacts
-MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../model_artifacts/sentiment_model.pkl')
-model = None
+model_bundle: dict[str, Any] | None = None
 
-# We need to replicate preprocess logic or import it. 
-# Importing from train.py might re-run training if not careful, so duplicating minimal logic or refactoring is better.
-# For now, duplicating simple logic to avoid side effects of imports if train.py isn't clean.
-stop_words = None
-lemmatizer = None
 
-def load_resources():
-    global model, stop_words, lemmatizer
-    if os.path.exists(MODEL_PATH):
-        model = joblib.load(MODEL_PATH)
-    else:
-        print(f"Model not found at {MODEL_PATH}. Training new model...")
-        try:
-            train_model()
-            if os.path.exists(MODEL_PATH):
-                model = joblib.load(MODEL_PATH)
-            else:
-                raise FileNotFoundError(f"Failed to create model at {MODEL_PATH}")
-        except Exception as e:
-            raise RuntimeError(f"Error training model: {e}")
-    
-    from nltk.corpus import stopwords
-    stop_words = set(stopwords.words('english'))
-    lemmatizer = WordNetLemmatizer()
+def load_resources() -> None:
+    global model_bundle
 
-def preprocess_text(text):
-    if not stop_words:
-        load_resources()
-    
-    text = text.lower()
-    text = re.sub(f'[{re.escape(string.punctuation)}]', '', text)
-    tokens = text.split()
-    tokens = [lemmatizer.lemmatize(word) for word in tokens if word not in stop_words]
-    return ' '.join(tokens)
+    if model_bundle is not None:
+        return
 
-def predict_sentiment(text: str):
-    if not model:
-        load_resources()
-    
-    clean_text = preprocess_text(text)
-    prediction = model.predict([clean_text])[0]
-    
-    # Get probabilities if supported
-    try:
-        probabilities = model.decision_function([clean_text])
-        # LinearSVC decision_function gives distance to hyperplane, not prob directly.
-        # We can implement a softmax or simple normalization if needed, or just return decision values.
-        # For simplicity in this demo, we'll map distance to a confidence score or just return values.
-        # A better way for probability with SVM is CalibratedClassifierCV, but we used LinearSVC.
-        # Let's just normalize using simple sigmoid for display purposes.
-        confidence = 1 / (1 + np.exp(-probabilities[0])) if len(probabilities.shape) == 1 else 0.5
-        probs = {"score": float(probabilities[0])}
-    except Exception:
-        confidence = 0.0
-        probs = {}
+    if not os.path.exists(MODEL_PATH):
+        train_model()
 
+    model_bundle = joblib.load(MODEL_PATH)
+
+
+def _format_response(predicted_label: str, probabilities: dict[str, float]) -> dict[str, Any]:
+    sentiment = predicted_label.capitalize()
+    confidence = float(probabilities.get(predicted_label, 0.0))
     return {
-        "sentiment": prediction,
-        "confidence": float(confidence), # This is a mockup for LinearSVC without calibration
-        "probabilities": probs
+        "sentiment": sentiment,
+        "confidence": confidence,
+        "probabilities": {
+            "positive": float(probabilities.get("positive", 0.0)),
+            "neutral": float(probabilities.get("neutral", 0.0)),
+            "negative": float(probabilities.get("negative", 0.0)),
+        },
     }
+
+
+def predict_sentiment(text: str) -> dict[str, Any]:
+    load_resources()
+    if not model_bundle or "pipeline" not in model_bundle:
+        raise RuntimeError("Model bundle is not loaded")
+
+    pipeline = model_bundle["pipeline"]
+    clean_text = preprocess_text(text)
+    if not clean_text:
+        return {
+            "sentiment": "Neutral",
+            "confidence": 0.34,
+            "probabilities": {
+                "positive": 0.33,
+                "neutral": 0.34,
+                "negative": 0.33,
+            },
+        }
+
+    predicted_label = str(pipeline.predict([clean_text])[0]).lower()
+    proba = pipeline.predict_proba([clean_text])[0]
+    classes = [str(c).lower() for c in pipeline.classes_]
+
+    probabilities = {label: 0.0 for label in ["positive", "neutral", "negative"]}
+    for idx, cls in enumerate(classes):
+        if cls in probabilities:
+            probabilities[cls] = float(proba[idx])
+
+    # Normalize once more for safety if classes are in unexpected order/shape.
+    total = float(np.sum(list(probabilities.values())))
+    if total > 0:
+        probabilities = {k: v / total for k, v in probabilities.items()}
+
+    if predicted_label not in probabilities:
+        predicted_label = max(probabilities, key=lambda cls: probabilities[cls])
+
+    return _format_response(predicted_label, probabilities)
