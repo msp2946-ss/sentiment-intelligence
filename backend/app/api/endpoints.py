@@ -26,6 +26,24 @@ predict_bulk_rate_limit = rate_limit(limit=20, window_seconds=60, scope="predict
 support_rate_limit = rate_limit(limit=10, window_seconds=300, scope="support_contact")
 
 
+def _send_support_email(email_message: EmailMessage, smtp_user: str, smtp_password: str) -> str:
+    # Prefer implicit TLS on 465; fallback to STARTTLS on 587 for environments
+    # where direct SSL sockets are restricted.
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as smtp:
+            smtp.login(smtp_user, smtp_password)
+            smtp.send_message(email_message)
+        return "smtp_ssl_465"
+    except Exception:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.ehlo()
+            smtp.login(smtp_user, smtp_password)
+            smtp.send_message(email_message)
+        return "smtp_starttls_587"
+
+
 @router.get("/health")
 def health_check():
     return {"status": "ok"}
@@ -126,9 +144,7 @@ def support_contact(
     )
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as smtp:
-            smtp.login(smtp_user, smtp_password)
-            smtp.send_message(email_message)
+        delivery_mode = _send_support_email(email_message, smtp_user, smtp_password)
     except Exception as exc:
         log_security_event(
             "support_contact_send_failed",
@@ -137,6 +153,8 @@ def support_contact(
             method=req.method,
             user_sub=user.get("sub"),
             provider=user.get("provider"),
+            error_type=type(exc).__name__,
+            error_message=str(exc),
         )
         raise HTTPException(status_code=500, detail="Failed to send support message.") from exc
 
@@ -146,6 +164,7 @@ def support_contact(
         method=req.method,
         user_sub=user.get("sub"),
         provider=user.get("provider"),
+        delivery_mode=delivery_mode,
     )
 
     return SupportContactResponse(success=True, detail="Support message sent successfully.")
