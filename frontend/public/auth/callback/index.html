@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Completing Login...</title>
+  </head>
+  <body>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var token = params.get('token');
+        var error = params.get('error');
+        var next = params.get('next') || '/';
+
+        var safeNext = '/';
+        if (typeof next === 'string' && next.startsWith('/') && !next.startsWith('//')) {
+          safeNext = next;
+        }
+
+        if (token) {
+          try {
+            localStorage.setItem('sentiai_token', token);
+            localStorage.setItem('sentiai_cookie_popup_pending', '1');
+            window.dispatchEvent(new Event('auth-changed'));
+            window.dispatchEvent(new Event('open-cookie-consent'));
+          } catch (e) {
+            // Ignore localStorage errors and continue redirect.
+          }
+          window.location.replace(safeNext);
+          return;
+        }
+
+        var message = error ? encodeURIComponent(error) : encodeURIComponent('Login failed');
+        window.location.replace('/login?error=' + message);
+      })();
+    </script>
+    <p>Completing login...</p>
+  </body>
+</html>
